@@ -1,6 +1,7 @@
 package badgerconnector
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 
@@ -88,30 +89,37 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	}
 
 	//standardise and optimise for time sorting
-	toFind = sdsshared.CreateKVStoreKey(toFind, "/")
-	value := make([]byte, 0)
+	value := make([]string, 0)
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(toFind))
-		if err != nil {
-			return err
-		}
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		prefix := []byte(toFind)
 
-		err = item.Value(func(val []byte) error {
-			// This func with val would only be called if item.Value encounters no error.
-			value = append(value, val...)
-			return nil
-		})
-		if err != nil {
-			return err
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				// This func with val would only be called if item.Value encounters no error.
+				value = append(value, string(val))
+				return nil
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		return nil
 	})
-
 	if err != nil {
 		return sdsshared.SimpleData{}, err
 	}
+
+	inter, err := json.MarshalIndent(value, " ", "")
+	if err != nil {
+		return sdsshared.SimpleData{}, err
+	}
+	out.Data.JSON = string(inter)
+	out.ResultCount = len(value)
 
 	return out, nil
 }
@@ -128,7 +136,7 @@ func (pal *Palawan) UpdateDataset(versionManager *sdsshared.VersionManager) (*sd
 func (pal *Palawan) AddTestData(num int) error {
 	for x := 0; x < num; x += 1 {
 		err := pal.Database.Update(func(txn *badger.Txn) error {
-			e := badger.NewEntry([]byte(fmt.Sprintf("TestEntry%d", x)), []byte(fmt.Sprintf("Value%d", rand.Int())))
+			e := badger.NewEntry([]byte(sdsshared.CreateKVStoreKey(fmt.Sprintf("TestEntry%d", x), "/")), []byte(fmt.Sprintf("Value%d", rand.Int())))
 			err := txn.SetEntry(e)
 			return err
 		})
@@ -137,5 +145,27 @@ func (pal *Palawan) AddTestData(num int) error {
 			return err
 		}
 	}
+	//Print everything in the database to log
+	if err := pal.Database.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			k := item.Key()
+			err := item.Value(func(v []byte) error {
+				fmt.Printf("key=%s, value=%s\n", k, v)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	return nil
 }
