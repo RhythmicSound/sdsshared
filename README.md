@@ -24,6 +24,7 @@ Then you can create a new service by picking your connector and running somethin
 package main
 
 import (
+	"fmt"
 	"log"
 
 	sdsshared "github.com/RhythmicSound/sds-shared"
@@ -31,14 +32,24 @@ import (
 )
 
 func main() {
-	repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
 
-	connector := badgerconnector.New("Dummy Data Server", repoURIAddress)
+	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI)
 
-	log.Fatalln(sdsshared.StartServer(connector, "Dummy", 8080))
+	log.Fatalln(sdsshared.StartServer(connector, "", 0))
 }
-
 ```
+Using default type values for the arguments to StartServer allows service name and ports to be set using environment variables at runtime.
+
+## Settings
+Settings for services created from this library can be hardcoded or set using environment variables
+
+|Variable|Explanation|Default|
+|-|-|-|
+|debug|Whether to print verbose output to log and load test data to database. Not for use in production| "false" |
+|database-uri| The path -URL or local path- to the database resource.| "databases/dummy" |
+|dataset-uri|The path -URL or local path- to the database resource.|"/datasets"|
+|name|The name of this service as visible to other services.|"Default Resource Name"|
+|publicport|PublicPort is the port from which this API can be accessed for data retrieval|"8080"|
 
 ## Writing new backend storage connectors
 Implement `DataResource` interface
@@ -51,13 +62,11 @@ type impl struct{
 	versioner    sdsshared.VersionManager
 }
 
-repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
-
 func NewImpl(resourceName, datasetArchiveLocation string) *impl{
   return &impl{
     	ResourceName: resourceName,
 		versioner: sdsshared.VersionManager{
-			Repo:           repoURIAddress,
+			Repo:           sdsshared.DatasetURI,
 			LastUpdated:    "",
 			CurrentVersion: 0,
 			DataSources:    make([]string, 0),

@@ -23,12 +23,18 @@ func redirect(w http.ResponseWriter, req *http.Request) {
 		http.StatusTemporaryRedirect)
 }
 
-//StartServer runs the server to interface with the system using the api methods of DataResource
+//StartServer runs the server to interface with the system using the api methods of DataResource.
+//
+//If port is set to 0 a default setting or the setting given using environment variable
+// `publicport` will be used
+//
+//Similarly if serverName is not set the default will be used or the value in environment
+// variable `name` suffixed with the word 'server'
 func StartServer(dr DataResource, serverName string, port int) error {
 	//set port
 	prt := ""
 	if port == 0 {
-		prt = ":8080"
+		prt = fmt.Sprintf(":%s", PublicPort)
 	} else {
 		prt = fmt.Sprintf(":%d", port)
 	}
@@ -82,7 +88,7 @@ func StartServer(dr DataResource, serverName string, port int) error {
 	}
 
 	if server.TLSConfig.ServerName == "" {
-		server.TLSConfig.ServerName = "Simple-Data-Service Default Name"
+		server.TLSConfig.ServerName = fmt.Sprintf("%s Server", ResourceServiceName)
 	}
 
 	//run startup scripts in the data resource

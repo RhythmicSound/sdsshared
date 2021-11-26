@@ -3,6 +3,7 @@ package sdsshared
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -32,4 +33,16 @@ func isValidUrl(toTest string) bool {
 	}
 
 	return true
+}
+
+//GetEnvar get an environment variable and if it is black sets the given default.
+//
+// The value may be set as default string purposefully rather than omitted.
+// In this case an empty string will be returned instead of the default string.
+func GetEnv(variable, deflt string) string {
+	out, set := os.LookupEnv(variable)
+	if set {
+		return out
+	}
+	return deflt
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	sdsshared "github.com/RhythmicSound/sds-shared"
@@ -8,9 +9,8 @@ import (
 )
 
 func main() {
-	repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
 
-	connector := badgerconnector.New("Dummy Data Server", repoURIAddress)
+	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI)
 
-	log.Fatalln(sdsshared.StartServer(connector, "Dummy", 8080))
+	log.Fatalln(sdsshared.StartServer(connector, fmt.Sprintf("Dummy %s Server", sdsshared.ResourceServiceName), 8080))
 }

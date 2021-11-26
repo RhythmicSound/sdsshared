@@ -50,9 +50,7 @@ func (pal *Palawan) Close() error {
 
 //Startup script function prior to receiving data access requests
 func (pal *Palawan) Startup() error {
-	dbDirLocation := "databases/dummy"
-
-	if _, err := pal.Open(dbDirLocation); err != nil {
+	if _, err := pal.Open(sdsshared.DBURI); err != nil {
 		return err
 	}
 
@@ -60,9 +58,11 @@ func (pal *Palawan) Startup() error {
 		return err
 	}
 
-	//?TESTING AND DEBUG
-	if err := pal.AddTestData(20); err != nil {
-		return err
+	if sdsshared.DebugMode {
+		//?TESTING AND DEBUG-----------------------------------
+		if err := pal.AddTestData(20); err != nil {
+			return err
+		} //? TESTING END --------------------------------------
 	}
 
 	return nil
