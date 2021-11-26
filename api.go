@@ -4,7 +4,10 @@ package sdsshared
 type DataResource interface {
 	Startup() error
 	UpdateDataset(*VersionManager) (*VersionManager, error)
-	Retrieve(string) ([]byte, error) //byte is JSON representation of SimpleData
+	//Retrieve takes query token and map[string]string group of query args
+	// received in the GET request.
+	// Returned []byte is JSON representation of SimpleData
+	Retrieve(string, map[string]string) (SimpleData, error)
 	Shutdown() error
 }
 

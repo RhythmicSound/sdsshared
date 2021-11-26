@@ -2,9 +2,11 @@ package sdsshared
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -39,13 +41,24 @@ func StartServer(dr DataResource, serverName string, port int) error {
 			redirect(w, r)
 		}
 		term := r.URL.Query().Get("fetch")
-		data, err := dr.Retrieve(term) //should already be in SimpleData api format
+
+		args := make(map[string]string)
+		for k, v := range r.URL.Query() {
+			args[k] = strings.Join(v, ",")
+		}
+		data, err := dr.Retrieve(term, args)
 		if err != nil {
 			log.Printf("Error. Could not retrieve data from data resource: %v", err)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprint(w, string(data))
+		dataJSON, err := json.MarshalIndent(data, " ", " ")
+		if err != nil {
+			log.Printf("Error marshalling returned SimpleData struct: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, string(dataJSON))
 	})
 
 	router.HandleFunc("/update", func(w http.ResponseWriter, r *http.Request) {

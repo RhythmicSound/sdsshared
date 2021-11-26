@@ -4,13 +4,13 @@ import (
 	"log"
 
 	sdsshared "github.com/RhythmicSound/sds-shared"
-	"github.com/RhythmicSound/sds-shared/badgerdb"
+	badgerconnector "github.com/RhythmicSound/sds-shared/badgerConnector"
 )
 
 func main() {
 	repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
 
-	connector := badgerdb.New(repoURIAddress)
+	connector := badgerconnector.New("Dummy Data Server", repoURIAddress)
 
 	log.Fatalln(sdsshared.StartServer(connector, "Dummy", 8080))
 }

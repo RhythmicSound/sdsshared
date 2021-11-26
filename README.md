@@ -19,16 +19,50 @@ Add to project
 go get github.com/rhythmicsound/sdsshared
  ```
 
+Then you can create a new service by picking your connector and running something like: 
+```go
+package main
+
+import (
+	"log"
+
+	sdsshared "github.com/RhythmicSound/sds-shared"
+	badgerconnector "github.com/RhythmicSound/sds-shared/badgerConnector"
+)
+
+func main() {
+	repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
+
+	connector := badgerconnector.New("Dummy Data Server", repoURIAddress)
+
+	log.Fatalln(sdsshared.StartServer(connector, "Dummy", 8080))
+}
+
+```
+
+## Writing new backend storage connectors
 Implement `DataResource` interface
 
 Example:
 ```go
-type impl struct{}
+type impl struct{
+	ResourceName string
+	Database     *badger.DB
+	versioner    sdsshared.VersionManager
+}
 
 repoURIAddress := "https://repo.com/versionedblobstore/blo.zip"
 
-func NewImpl(datasetArchiveLocation string){
-  return &impl{}
+func NewImpl(resourceName, datasetArchiveLocation string) *impl{
+  return &impl{
+    	ResourceName: resourceName,
+		versioner: sdsshared.VersionManager{
+			Repo:           repoURIAddress,
+			LastUpdated:    "",
+			CurrentVersion: 0,
+			DataSources:    make([]string, 0),
+		},
+  }
 }
 ```
 
@@ -46,12 +80,15 @@ vt := &VersionManager{
 
 (im impl) UpdateDataset(vt)(*VersionManager,error){
   ... // Logic to keep the database synced with a master versioned dataset archive somehwere
+
+    //Passing a VersionManager as an arg should overwrite internal VM created in New. Must accept nil to use default
 }
 ```
 
 ```go
-(im impl) Retrieve(someSearchString)([]byte,error){
-   ... //Fetching data from the database based on given key value. Returns SimpleData struct in json binary format
+(im impl) Retrieve(someSearchString)(sdsshared.SimpleData,error){
+   ... //Fetching data from the database based on given key value. 
+    //Use the latest VersionManager to complete the Meta elements of SimpleData response object
 }
 ```
 
@@ -62,11 +99,4 @@ vt := &VersionManager{
 }
 ```
 
-Run the server
-```go
-i := NewImpl()
-
-... //Any other logic that may be required
-
-log.Fatalln(sdsshared.StartServer(i))
-```
+> See the badgerConnector package for best practise
