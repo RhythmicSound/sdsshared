@@ -94,7 +94,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	err := pal.Database.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
-		prefix := []byte(toFind)
+		prefix := []byte(toFind + "/")
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
