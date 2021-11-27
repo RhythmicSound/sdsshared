@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
+	"time"
 
 	sdsshared "github.com/RhythmicSound/sds-shared"
 	badger "github.com/dgraph-io/badger/v3"
@@ -55,15 +57,38 @@ func (pal *Palawan) Startup() error {
 		return err
 	}
 
+	//download and deploy dataset to database and run as datasource
 	if _, err := pal.UpdateDataset(nil); err != nil {
 		return err
 	}
 
+	//turn on debug if needed. If so add test data
 	if sdsshared.DebugMode {
 		//?TESTING AND DEBUG-----------------------------------
 		if err := pal.AddTestData(20); err != nil {
 			return err
 		} //? TESTING END --------------------------------------
+	}
+
+	//Get versioner meta info from downloaded database
+	if err := pal.Database.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("_version"))
+		if err != nil {
+			return err
+		}
+		if err := item.Value(func(val []byte) error {
+			vs := &sdsshared.VersionManager{}
+			if err := json.Unmarshal(val, vs); err != nil {
+				return err
+			}
+			pal.versioner = *vs
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	return nil
@@ -88,19 +113,22 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 		}, RequestOptions: options,
 	}
 
+	//seperator used in CreateKVStoreKey function
+	keySeperator := "/"
 	//standardise and optimise for time sorting
-	value := make([]string, 0)
+	value := make(map[string]string, 0)
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
-		prefix := []byte(toFind + "/")
+		prefix := []byte(toFind + keySeperator)
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			err := item.Value(func(val []byte) error {
 				// This func with val would only be called if item.Value encounters no error.
-				value = append(value, string(val))
+				timestamp := strings.Split(string(item.Key()), keySeperator)[1]
+				value[timestamp] = string(val)
 				return nil
 			})
 			if err != nil {
@@ -113,12 +141,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	if err != nil {
 		return sdsshared.SimpleData{}, err
 	}
-
-	inter, err := json.MarshalIndent(value, " ", "")
-	if err != nil {
-		return sdsshared.SimpleData{}, err
-	}
-	out.Data.JSON = string(inter)
+	out.Data.Values = value
 	out.ResultCount = len(value)
 
 	return out, nil
@@ -134,19 +157,40 @@ func (pal *Palawan) UpdateDataset(versionManager *sdsshared.VersionManager) (*sd
 
 //AddTestData adds [num] items of randomised test data to the database
 func (pal *Palawan) AddTestData(num int) error {
-	for x := 0; x < num; x += 1 {
-		err := pal.Database.Update(func(txn *badger.Txn) error {
-			e := badger.NewEntry([]byte(sdsshared.CreateKVStoreKey(fmt.Sprintf("TestEntry%d", x), "/")), []byte(fmt.Sprintf("Value%d", rand.Int())))
-			err := txn.SetEntry(e)
-			return err
-		})
-
+	if err := pal.Database.Update(func(txn *badger.Txn) error {
+		version := sdsshared.VersionManager{
+			CurrentVersion: 1,
+			LastUpdated:    time.Now().Format(time.RFC3339),
+			DataSources:    []string{"Dummy data warehouse"},
+		}
+		versionjson, err := json.Marshal(version)
 		if err != nil {
 			return err
 		}
-	}
-	//Print everything in the database to log
-	if err := pal.Database.View(func(txn *badger.Txn) error {
+
+		etry := badger.NewEntry([]byte("_version"), []byte(versionjson))
+		if err := txn.SetEntry(etry); err != nil {
+			return err
+		}
+
+		for x := 0; x < num; x += 1 {
+			e := badger.NewEntry([]byte(sdsshared.CreateKVStoreKey(fmt.Sprintf("TestEntry%d", x), "/")), []byte(fmt.Sprintf("Value%d", rand.Int())))
+			if err := txn.SetEntry(e); err != nil {
+				if err == badger.ErrTxnTooBig {
+					err = txn.Commit()
+					if err != nil {
+						return err
+					}
+					txn = pal.Database.NewTransaction(true)
+					err = txn.SetEntry(e)
+				}
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		//Print everything in the database to log
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		it := txn.NewIterator(opts)
@@ -165,6 +209,14 @@ func (pal *Palawan) AddTestData(num int) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	//GC
+	for {
+		if err := pal.Database.RunValueLogGC(0.7); err != nil {
+			break
+		}
+
 	}
 
 	return nil

@@ -22,8 +22,7 @@ type SimpleData struct {
 	} `json:"meta"`
 	Data struct {
 		//... Requested data schema...
-		JSON string `json:"json_output,omitempty"`
-		Text string `json:"plain_text,omitempty"`
+		Values interface{} `json:"values"`
 	} `json:"data,omitempty"`
 	Errors map[string]string `json:"errors,omitempty"`
 }
@@ -31,13 +30,13 @@ type SimpleData struct {
 //VersionManager is the struct that allows the instance to check its current used
 // dataset version and compare it against the latest available to judge update need
 type VersionManager struct {
-	CurrentVersion int
+	CurrentVersion int `json:"version,omitempty"`
 	//Repo is where to get the dataset archive from (URL)
-	Repo string
+	Repo string `json:"repo,omitempty"`
 	//LastUpdated is when the Repo was last updated from latest version
-	LastUpdated string
+	LastUpdated string `json:"dataset_updated"`
 	//List of initial data sources gained from last update from repo
-	DataSources []string
+	DataSources []string `json:"data_sources"`
 }
 
 func (vt *VersionManager) UpdateDataset(dr DataResource) error {

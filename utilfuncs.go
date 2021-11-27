@@ -17,7 +17,7 @@ func CreateKVStoreKey(key string, sep string) string {
 	if sep == "" {
 		sep = "/"
 	}
-	return fmt.Sprintf("%s%s%d", key, sep, time.Now().Unix())
+	return fmt.Sprintf("%s%s%d", key, sep, time.Now().UnixNano())
 }
 
 //isValidUrl tests a string to determine if it is a well-structured url or not.
