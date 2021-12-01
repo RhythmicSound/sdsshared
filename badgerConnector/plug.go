@@ -138,7 +138,11 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	value := make(map[string]string, 0)
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		if pal.predictiveMode {
+			opts.PrefetchValues = false
+		}
+		it := txn.NewIterator(opts)
 		defer it.Close()
 		prefix := []byte(toFind + keySeperator)
 		if pal.predictiveMode {
@@ -147,14 +151,14 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
+			keyComposite := strings.Split(string(item.Key()), keySeperator)
+			//If predictiveMode is on, only a list of matching keys are required without timestamp
+			if pal.predictiveMode {
+				value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
+				continue
+			}
 			err := item.Value(func(val []byte) error {
 				// This func with val would only be called if item.Value encounters no error.
-				keyComposite := strings.Split(string(item.Key()), keySeperator)
-				//If predictiveMode is on, only a list of matching keys are required without timestamp
-				if pal.predictiveMode {
-					value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
-					return nil
-				}
 				timestamp := keyComposite[1]
 				value[timestamp] = string(val)
 				return nil
