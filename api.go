@@ -17,7 +17,7 @@ type SimpleData struct {
 	RequestOptions map[string]string `json:"request_options,omitempty"`
 	Meta           struct {
 		Resource    string   `json:"resource"`
-		LastUpdated string   `json:"dataset_updated"`
+		LastUpdated string   `json:"dataset_updated"` //time.RFC3339
 		DataSources []string `json:"data_sources"`
 	} `json:"meta"`
 	Data struct {
@@ -33,7 +33,7 @@ type VersionManager struct {
 	CurrentVersion int `json:"version,omitempty"`
 	//Repo is where to get the dataset archive from (URL)
 	Repo string `json:"repo,omitempty"`
-	//LastUpdated is when the Repo was last updated from latest version
+	//LastUpdated is when the Repo was last updated from latest version (time.RFC3339)
 	LastUpdated string `json:"dataset_updated"`
 	//List of initial data sources gained from last update from repo
 	DataSources []string `json:"data_sources"`

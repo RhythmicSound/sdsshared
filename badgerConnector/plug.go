@@ -1,10 +1,16 @@
 package badgerconnector
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
+	"os"
+	"path"
 	"strings"
+	"sync"
 	"time"
 
 	sdsshared "github.com/RhythmicSound/sds-shared"
@@ -13,16 +19,23 @@ import (
 
 //Palawan (a stinky Badger specices) is the main api implementer for the Badger KV database
 type Palawan struct {
-	ResourceName string
-	Database     *badger.DB
-	versioner    sdsshared.VersionManager
+	ResourceName         string
+	Database             *badger.DB
+	transitionalDatabase *badger.DB // to put a db whilst doing update database switchover
+	updateCount          int        //number of times UpdateDataset method
+	versioner            sdsshared.VersionManager
+	mu                   *sync.Mutex
+	predictiveMode       bool //whether or not the retieve term should be considered the full search term (false) or an incomplete typed term (true)
 }
 
 //New creates a new BadgerDB Palawan instance that implements DataResource
-func New(resourceName, datasetDownloadLoc string) *Palawan {
+func New(resourceName, datasetDownloadLoc string, predictiveMode bool) *Palawan {
 
 	return &Palawan{
-		ResourceName: resourceName,
+		ResourceName:   resourceName,
+		predictiveMode: predictiveMode,
+		mu:             &sync.Mutex{},
+		updateCount:    0,
 		versioner: sdsshared.VersionManager{
 			Repo:           datasetDownloadLoc,
 			LastUpdated:    "",
@@ -42,7 +55,6 @@ func (pal *Palawan) Open(databaseLocation string) (*badger.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	pal.Database = db
 	return db, nil
 }
 
@@ -53,13 +65,20 @@ func (pal *Palawan) Close() error {
 
 //Startup script function prior to receiving data access requests
 func (pal *Palawan) Startup() error {
-	if _, err := pal.Open(sdsshared.DBURI); err != nil {
+	if db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount)); err != nil {
 		return err
+	} else {
+		pal.Database = db
 	}
 
 	//download and deploy dataset to database and run as datasource
-	if _, err := pal.UpdateDataset(nil); err != nil {
-		return err
+	if !sdsshared.DebugMode {
+		if err := pal.fetchDataset(sdsshared.DatasetURI); err != nil {
+			return err
+		}
+		if _, err := pal.loadDataset(nil); err != nil {
+			return err
+		}
 	}
 
 	//turn on debug if needed. If so add test data
@@ -122,12 +141,21 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 		prefix := []byte(toFind + keySeperator)
+		if pal.predictiveMode {
+			prefix = []byte(toFind)
+		}
 
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			err := item.Value(func(val []byte) error {
 				// This func with val would only be called if item.Value encounters no error.
-				timestamp := strings.Split(string(item.Key()), keySeperator)[1]
+				keyComposite := strings.Split(string(item.Key()), keySeperator)
+				//If predictiveMode is on, only a list of matching keys are required without timestamp
+				if pal.predictiveMode {
+					value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
+					return nil
+				}
+				timestamp := keyComposite[1]
 				value[timestamp] = string(val)
 				return nil
 			})
@@ -149,8 +177,23 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 
 //UpdateDataset function loads data from source and updates db in use
 func (pal *Palawan) UpdateDataset(versionManager *sdsshared.VersionManager) (*sdsshared.VersionManager, error) {
-
-	//todo ...
+	//Open new blank db
+	db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount+1))
+	if err != nil {
+		return nil, err
+	}
+	//Download new data
+	if err := pal.fetchDataset(sdsshared.DatasetURI); err != nil {
+		return nil, err
+	}
+	//Load in new data
+	if _, err := pal.loadDataset(db); err != nil {
+		return nil, err
+	}
+	//Make new db the in use pal.Database
+	if err = pal.mount(db); err != nil {
+		return nil, err
+	}
 
 	return &pal.versioner, nil
 }
@@ -218,6 +261,98 @@ func (pal *Palawan) AddTestData(num int) error {
 		}
 
 	}
+
+	return nil
+}
+
+//fetchDataset downloads the dataset archive from given location to the local downloads location
+func (pal Palawan) fetchDataset(datasetURL string) error {
+	//Open download location dir
+	if err := os.MkdirAll(sdsshared.LocalDownloadDir, 0755); err != nil {
+		return err
+	}
+	//Download
+	resp, err := http.DefaultClient.Get(datasetURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	//create file in download folder
+	file, err := os.Create(path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zip"))
+	defer file.Close()
+	if err != nil {
+		return err
+	}
+	io.Copy(file, resp.Body)
+
+	return nil
+}
+
+//loadDataset loads a dataset from a zip archive containing .bak files to an open badgerdb instance
+//
+//If dbToLoad is nil, it loads the data directly into the pal.Database instance
+func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
+	fileLoc := path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zip")
+	lockFirst := false
+	//get usable target database
+	if dbToLoad == nil {
+		dbToLoad = pal.Database
+		lockFirst = true
+	}
+	//open zip
+	zipR, err := zip.OpenReader(fileLoc)
+	if err != nil {
+		return nil, err
+	}
+	//load backup file(s)
+	files := zipR.File
+	if lockFirst {
+		pal.mu.Lock()
+	}
+	for _, file := range files {
+		if path.Ext(file.Name) == ".bak" {
+			f, err := file.Open()
+			if err != nil {
+				return nil, err
+			}
+			if err = dbToLoad.Load(f, 10); err != nil {
+				return nil, err
+			}
+			if err = f.Close(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if lockFirst {
+		pal.mu.Unlock()
+	}
+	if err := zipR.Close(); err != nil {
+		return nil, err
+	}
+	//cleanup downloads
+	if err := os.Remove(fileLoc); err != nil {
+		return nil, err
+	}
+
+	return dbToLoad, nil
+}
+
+//mount loads the given badger DB instance to the Palwan instance and closes the existing instance.
+//
+//this uses the transitional db field as a crossover point.
+func (pal *Palawan) mount(dbToMount *badger.DB) error {
+	pal.mu.Lock()
+	pal.transitionalDatabase = pal.Database
+	pal.Database = dbToMount
+	pal.mu.Unlock()
+	//close old db
+	err := pal.transitionalDatabase.Close()
+	if err != nil {
+		return err
+	}
+	//Update pal.versioner
+	//todo ...
+	pal.versioner.LastUpdated = time.Now().Format(time.RFC3339)
 
 	return nil
 }

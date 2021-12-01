@@ -14,13 +14,16 @@ var (
 	DebugMode bool
 	//DBURI is the path -URL or local path- to the database resource.
 	// If it doesn't exist one will be created at this resource for
-	// some connector implementations
+	// some connector implementations. For local dbs this may be pre/suf-fixed
+	// to allow for dataset updates with minimised downtime
 	DBURI string
 	//DBURI is the path =URL or local path= to the archive file for
 	//the dataset used to rebuild the database
 	DatasetURI string
 	//PublicPort is the port from which this API can be accessed for data retrieval
 	PublicPort string
+	//LocalDownloadDir is the local relative or absolute path to a downloads folder to use
+	LocalDownloadDir string
 )
 
 func init() {
@@ -38,4 +41,6 @@ func init() {
 	ResourceServiceName = GetEnv("name", "Default Resource Name")
 	//get port to use
 	PublicPort = GetEnv("publicport", "8080")
+	//get download dir to use
+	LocalDownloadDir = GetEnv("downloaddir", "/downloads")
 }
