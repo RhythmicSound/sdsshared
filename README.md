@@ -50,6 +50,7 @@ Settings for services created from this library can be hardcoded or set using en
 |dataset-uri|The path -URL or local path- to the database resource.|"/datasets"|
 |name|The name of this service as visible to other services.|"Default Resource Name"|
 |publicport|PublicPort is the port from which this API can be accessed for data retrieval|"8080"|
+|downloaddir|The local path where download files will be saved to|"/downloads"|
 
 ## Writing new backend storage connectors
 Implement `DataResource` interface
@@ -90,7 +91,8 @@ vt := &VersionManager{
 (im impl) UpdateDataset(vt)(*VersionManager,error){
   ... // Logic to keep the database synced with a master versioned dataset archive somehwere
 
-    //Passing a VersionManager as an arg should overwrite internal VM created in New. Must accept nil to use default
+    //Passing a VersionManager as an arg should overwrite internal VM created in New. 
+    //Must accept nil to use default
 }
 ```
 

@@ -2,6 +2,8 @@ package sdsshared
 
 import (
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
@@ -45,4 +47,32 @@ func GetEnv(variable, deflt string) string {
 		return out
 	}
 	return deflt
+}
+
+//NewHTTPClient is the default client to be used instead of default client.
+//Ammended timeouts. See  //https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/
+func NewHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+
+			ExpectContinueTimeout: 1 * time.Second,
+
+			IdleConnTimeout:     30 * time.Second,
+			MaxIdleConnsPerHost: 10,
+			MaxIdleConns:        100,
+
+			DisableKeepAlives: false,
+			ForceAttemptHTTP2: true,
+		},
+	}
 }
