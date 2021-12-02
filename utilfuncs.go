@@ -1,11 +1,13 @@
 package sdsshared
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -75,4 +77,19 @@ func NewHTTPClient() *http.Client {
 			ForceAttemptHTTP2: true,
 		},
 	}
+}
+
+//returnErrorJSON takes the given error details and returns a JSON standard simple data
+// struct to return to the client
+func returnErrorJSON(errorTitle string, errorCode int, errorMsg string) (string, error) {
+	nw := SimpleData{
+		ResultCount: 0,
+		Meta: Meta{
+			Resource: ResourceServiceName,
+		},
+		Errors: map[string]string{"title": errorTitle, "code": strconv.Itoa(errorCode), "message": errorMsg},
+	}
+
+	binjson, err := json.MarshalIndent(nw, " ", " ")
+	return string(binjson), fmt.Errorf("Error json marshalling Error message: %v", err)
 }

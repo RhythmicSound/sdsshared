@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -39,7 +38,7 @@ func New(resourceName, datasetDownloadLoc string, predictiveMode bool) *Palawan 
 		versioner: sdsshared.VersionManager{
 			Repo:           datasetDownloadLoc,
 			LastUpdated:    "",
-			CurrentVersion: 0,
+			CurrentVersion: "0",
 			DataSources:    make([]string, 0),
 		},
 	}
@@ -47,7 +46,7 @@ func New(resourceName, datasetDownloadLoc string, predictiveMode bool) *Palawan 
 
 // Open the Badger database located in the databaseLocation directory.
 // It will be created if it doesn't exist.
-func (pal *Palawan) Open(databaseLocation string) (*badger.DB, error) {
+func (pal Palawan) Open(databaseLocation string) (*badger.DB, error) {
 	options := badger.DefaultOptions(databaseLocation)
 	options = options.WithInMemory(false)
 
@@ -121,11 +120,7 @@ func (pal *Palawan) Shutdown() error {
 //Retrieve is run each time the server receives a search term to query the db for
 func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshared.SimpleData, error) {
 	out := sdsshared.SimpleData{
-		Meta: struct {
-			Resource    string   "json:\"resource\""
-			LastUpdated string   "json:\"dataset_updated\""
-			DataSources []string "json:\"data_sources\""
-		}{
+		Meta: sdsshared.Meta{
 			LastUpdated: pal.versioner.LastUpdated,
 			DataSources: pal.versioner.DataSources,
 			Resource:    pal.ResourceName,
@@ -180,33 +175,33 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 }
 
 //UpdateDataset function loads data from source and updates db in use
-func (pal *Palawan) UpdateDataset(versionManager *sdsshared.VersionManager) (*sdsshared.VersionManager, error) {
+func (pal Palawan) UpdateDataset() (sdsshared.VersionManager, error) {
 	//Open new blank db
 	db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount+1))
 	if err != nil {
-		return nil, err
+		return sdsshared.VersionManager{}, err
 	}
 	//Download new data
 	if err := pal.fetchDataset(sdsshared.DatasetURI); err != nil {
-		return nil, err
+		return sdsshared.VersionManager{}, err
 	}
 	//Load in new data
 	if _, err := pal.loadDataset(db); err != nil {
-		return nil, err
+		return sdsshared.VersionManager{}, err
 	}
 	//Make new db the in use pal.Database
 	if err = pal.mount(db); err != nil {
-		return nil, err
+		return sdsshared.VersionManager{}, err
 	}
 
-	return &pal.versioner, nil
+	return pal.versioner, nil
 }
 
 //AddTestData adds [num] items of randomised test data to the database
 func (pal *Palawan) AddTestData(num int) error {
 	if err := pal.Database.Update(func(txn *badger.Txn) error {
 		version := sdsshared.VersionManager{
-			CurrentVersion: 1,
+			CurrentVersion: "1.0.0",
 			LastUpdated:    time.Now().Format(time.RFC3339),
 			DataSources:    []string{"Dummy data warehouse"},
 		}
@@ -215,8 +210,17 @@ func (pal *Palawan) AddTestData(num int) error {
 			return err
 		}
 
-		etry := badger.NewEntry([]byte("_version"), []byte(versionjson))
-		if err := txn.SetEntry(etry); err != nil {
+		//add meta data ---
+		etryVersion := badger.NewEntry([]byte("_version"), []byte(versionjson))
+		if err := txn.SetEntry(etryVersion); err != nil {
+			return err
+		}
+		etrySources := badger.NewEntry([]byte("_sources"), []byte("Dummy data warehouse"))
+		if err := txn.SetEntry(etrySources); err != nil {
+			return err
+		}
+		etryUpdated := badger.NewEntry([]byte("_updated"), []byte(time.Now().Format(time.RFC3339)))
+		if err := txn.SetEntry(etryUpdated); err != nil {
 			return err
 		}
 
@@ -276,7 +280,8 @@ func (pal Palawan) fetchDataset(datasetURL string) error {
 		return err
 	}
 	//Download
-	resp, err := http.DefaultClient.Get(datasetURL)
+	client := sdsshared.NewHTTPClient()
+	resp, err := client.Get(datasetURL)
 	if err != nil {
 		return err
 	}
@@ -328,6 +333,10 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 		}
 	}
 	if lockFirst {
+		pal.versioner, err = deriveVersioner(dbToLoad)
+		if err != nil {
+			return nil, err
+		}
 		pal.mu.Unlock()
 	}
 	if err := zipR.Close(); err != nil {
@@ -345,18 +354,62 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 //
 //this uses the transitional db field as a crossover point.
 func (pal *Palawan) mount(dbToMount *badger.DB) error {
+	var err error
 	pal.mu.Lock()
 	pal.transitionalDatabase = pal.Database
 	pal.Database = dbToMount
-	pal.mu.Unlock()
-	//close old db
-	err := pal.transitionalDatabase.Close()
+	//Update pal.versioner
+	pal.versioner, err = deriveVersioner(dbToMount)
 	if err != nil {
 		return err
 	}
-	//Update pal.versioner
+	pal.mu.Unlock()
+	//close old db
+	err = pal.transitionalDatabase.Close()
+	if err != nil {
+		return err
+	}
 	//todo ...
-	pal.versioner.LastUpdated = time.Now().Format(time.RFC3339)
 
 	return nil
+}
+
+//deriveVersioner creates the Versioner based on the meta fields of the database
+func deriveVersioner(db *badger.DB) (sdsshared.VersionManager, error) {
+	vs := sdsshared.VersionManager{}
+	//Update pal.versioner
+	if err := db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("_version"))
+		if err != nil {
+			return err
+		}
+		item.Value(func(val []byte) error {
+			vs.CurrentVersion = string(val)
+			return nil
+		})
+
+		item, err = txn.Get([]byte("_sources"))
+		if err != nil {
+			return err
+		}
+		item.Value(func(val []byte) error {
+			vs.DataSources = strings.Split(string(val), ",")
+			return nil
+		})
+
+		item, err = txn.Get([]byte("_updated"))
+		if err != nil {
+			return err
+		}
+		item.Value(func(val []byte) error {
+			vs.LastUpdated = string(val)
+			return nil
+		})
+
+		return nil
+	}); err != nil {
+		return sdsshared.VersionManager{}, err
+	}
+	vs.Repo = sdsshared.DatasetURI
+	return vs, nil
 }

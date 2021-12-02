@@ -55,13 +55,23 @@ func StartServer(dr DataResource, serverName string, port int) error {
 		data, err := dr.Retrieve(term, args)
 		if err != nil {
 			log.Printf("Error. Could not retrieve data from data resource: %v", err)
-			w.WriteHeader(http.StatusNotFound)
+			errMsgPayload, err := returnErrorJSON("Dataset fetch error", http.StatusInternalServerError, err.Error())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, errMsgPayload)
 			return
 		}
 		dataJSON, err := json.MarshalIndent(data, " ", " ")
 		if err != nil {
 			log.Printf("Error marshalling returned SimpleData struct: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			errMsgPayload, err := returnErrorJSON("Marshaling results error", http.StatusInternalServerError, err.Error())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, errMsgPayload)
 			return
 		}
 		fmt.Fprint(w, string(dataJSON))
@@ -72,6 +82,29 @@ func StartServer(dr DataResource, serverName string, port int) error {
 			redirect(w, r)
 		}
 
+		newVersionInfo, err := dr.UpdateDataset()
+		if err != nil {
+			log.Printf("Error updating dataset: %v", err)
+			errMsgPayload, err := returnErrorJSON("Dataset update error", http.StatusInternalServerError, err.Error())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, errMsgPayload)
+			return
+		}
+		versionDataJSON, err := json.MarshalIndent(newVersionInfo, " ", " ")
+		if err != nil {
+			log.Printf("Error marshalling returned VersionData struct: %v", err)
+			errMsgPayload, err := returnErrorJSON("Dataset update error", http.StatusInternalServerError, err.Error())
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, errMsgPayload)
+			return
+		}
+		fmt.Fprint(w, string(versionDataJSON))
 	})
 
 	//build server
@@ -102,5 +135,3 @@ func StartServer(dr DataResource, serverName string, port int) error {
 	//run server
 	return fmt.Errorf("Could not launch server: %+v", server.ListenAndServe())
 }
-
-func updateDataset(datasetLink string) {}
