@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	sdsshared "github.com/RhythmicSound/sds-shared"
+	sdsshared "github.com/RhythmicSound/sdsshared"
 	badger "github.com/dgraph-io/badger/v3"
 )
 
@@ -65,18 +65,18 @@ func (pal *Palawan) Close() error {
 //Startup script function prior to receiving data access requests
 func (pal *Palawan) Startup() error {
 	if db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount)); err != nil {
-		return err
+		return fmt.Errorf("Error opening database in badgerConnector.Startup(): %v", err)
 	} else {
 		pal.Database = db
 	}
 
 	//download and deploy dataset to database and run as datasource
 	if !sdsshared.DebugMode {
-		if err := pal.fetchDataset(sdsshared.DatasetURI); err != nil {
-			return err
+		if err := pal.fetchDataset(pal.versioner.Repo, true); err != nil {
+			return fmt.Errorf("Error fetching dataset in badgerConnector.Startup(): %v", err)
 		}
 		if _, err := pal.loadDataset(nil); err != nil {
-			return err
+			return fmt.Errorf("Error loading dataset in badgerConnector.Startup(): %v", err)
 		}
 	}
 
@@ -84,7 +84,7 @@ func (pal *Palawan) Startup() error {
 	if sdsshared.DebugMode {
 		//?TESTING AND DEBUG-----------------------------------
 		if err := pal.AddTestData(20); err != nil {
-			return err
+			return fmt.Errorf("Error adding test data to database in badgerConnector.Startup(): %v", err)
 		} //? TESTING END --------------------------------------
 	}
 
@@ -92,12 +92,12 @@ func (pal *Palawan) Startup() error {
 	if err := pal.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("_version"))
 		if err != nil {
-			return err
+			return fmt.Errorf("Error getting version data from loaded database in badgerConnector.Startup(): %v", err)
 		}
 		if err := item.Value(func(val []byte) error {
 			vs := &sdsshared.VersionManager{}
 			if err := json.Unmarshal(val, vs); err != nil {
-				return err
+				return fmt.Errorf("Error unmarshalling version data in badgerConnector.Startup(): %v", err)
 			}
 			pal.versioner = *vs
 			return nil
@@ -182,7 +182,7 @@ func (pal Palawan) UpdateDataset() (sdsshared.VersionManager, error) {
 		return sdsshared.VersionManager{}, err
 	}
 	//Download new data
-	if err := pal.fetchDataset(sdsshared.DatasetURI); err != nil {
+	if err := pal.fetchDataset(pal.versioner.Repo, true); err != nil {
 		return sdsshared.VersionManager{}, err
 	}
 	//Load in new data
@@ -274,7 +274,19 @@ func (pal *Palawan) AddTestData(num int) error {
 }
 
 //fetchDataset downloads the dataset archive from given location to the local downloads location
-func (pal Palawan) fetchDataset(datasetURL string) error {
+//
+//Mark gcp as true if downloading from a private GCP bucket. Requires GCP Authentication
+func (pal Palawan) fetchDataset(datasetURL string, gcp bool) error {
+
+	//If downloading from GCP cloud storage that requires authentication
+	if gcp {
+		return sdsshared.GCPDownload(sdsshared.DatasetBucketName, sdsshared.DatasetObjectName)
+	}
+
+	//Else download from URL---
+	if datasetURL == "" {
+		datasetURL = pal.versioner.Repo
+	}
 	//Open download location dir
 	if err := os.MkdirAll(sdsshared.LocalDownloadDir, 0755); err != nil {
 		return err
