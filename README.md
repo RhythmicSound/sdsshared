@@ -42,7 +42,12 @@ Using default type values for the arguments to StartServer allows service name a
 
 An example execute command is: 
 ```go
-debug=false name="postcodeUK-Service" database_uri="working/databases/postcodeUKdb" dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" objectname="datasets/postcodesUK.zip" go run cmd/dummy.go
+debug=false \
+name="postcodeUK-Service" \
+database_uri="working/databases/postcodeUKdb" \
+dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" \ 
+objectname="datasets/postcodesUK.zip" \
+go run cmd/dummy.go
 ```
 
 ## Settings

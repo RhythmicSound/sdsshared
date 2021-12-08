@@ -92,7 +92,7 @@ func (pal *Palawan) Startup() error {
 	if err := pal.Database.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte("_version"))
 		if err != nil {
-			return fmt.Errorf("Error getting version data from loaded database in badgerConnector.Startup(): %v", err)
+			return fmt.Errorf("Error getting version data from loaded database in badgerConnector.Startup(). Must contain key '_version': %v", err)
 		}
 		if err := item.Value(func(val []byte) error {
 			vs := &sdsshared.VersionManager{}
