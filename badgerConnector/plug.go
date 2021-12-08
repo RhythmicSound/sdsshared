@@ -104,6 +104,26 @@ func (pal *Palawan) Startup() error {
 		}); err != nil {
 			return err
 		}
+		//Print top 5 items to logout for debug and visual accuracy check
+		top := 5
+		opt := badger.DefaultIteratorOptions
+		opt.PrefetchValues = true
+		opt.PrefetchSize = top
+		it := txn.NewIterator(opt)
+		defer it.Close()
+		it.Rewind()
+		for i := 0; i < top && it.Valid(); i += 1 {
+			item := it.Item()
+			item.Value(func(val []byte) error {
+				vl := make(map[string]string)
+				if err := json.Unmarshal(val, &vl); err != nil {
+					return err
+				}
+				fmt.Printf("%s -> %+v\n", string(item.Key()), vl)
+				return nil
+			})
+			it.Next()
+		} //Top complete
 		return nil
 	}); err != nil {
 		return err
@@ -126,7 +146,8 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			Resource:    pal.ResourceName,
 		}, RequestOptions: options,
 	}
-
+	//normalise to all uppercase keys
+	toFind = strings.ToUpper(toFind)
 	//seperator used in CreateKVStoreKey function
 	keySeperator := "/"
 	//standardise and optimise for time sorting
@@ -149,7 +170,11 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			keyComposite := strings.Split(string(item.Key()), keySeperator)
 			//If predictiveMode is on, only a list of matching keys are required without timestamp
 			if pal.predictiveMode {
-				value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
+				if _, ok := value[keyComposite[0]]; ok {
+					value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
+				} else {
+					value[keyComposite[0]] = keyComposite[1]
+				}
 				continue
 			}
 			err := item.Value(func(val []byte) error {
@@ -175,9 +200,10 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 }
 
 //UpdateDataset function loads data from source and updates db in use
-func (pal Palawan) UpdateDataset() (sdsshared.VersionManager, error) {
+func (pal *Palawan) UpdateDataset() (sdsshared.VersionManager, error) {
 	//Open new blank db
-	db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount+1))
+	pal.updateCount += 1
+	db, err := pal.Open(fmt.Sprintf("%s%d", sdsshared.DBURI, pal.updateCount))
 	if err != nil {
 		return sdsshared.VersionManager{}, err
 	}
@@ -213,14 +239,6 @@ func (pal *Palawan) AddTestData(num int) error {
 		//add meta data ---
 		etryVersion := badger.NewEntry([]byte("_version"), []byte(versionjson))
 		if err := txn.SetEntry(etryVersion); err != nil {
-			return err
-		}
-		etrySources := badger.NewEntry([]byte("_sources"), []byte("Dummy data warehouse"))
-		if err := txn.SetEntry(etrySources); err != nil {
-			return err
-		}
-		etryUpdated := badger.NewEntry([]byte("_updated"), []byte(time.Now().Format(time.RFC3339)))
-		if err := txn.SetEntry(etryUpdated); err != nil {
 			return err
 		}
 
@@ -323,7 +341,7 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 	//open zip
 	zipR, err := zip.OpenReader(fileLoc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error. Could not get zip reader in badgerConnector.loadDataset(): %v", err)
 	}
 	//load backup file(s)
 	files := zipR.File
@@ -337,7 +355,7 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 				return nil, err
 			}
 			if err = dbToLoad.Load(f, 10); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("Error running dbToLoad.Load() in loadDataset within BadgetConnerctor: %v", err)
 			}
 			if err = f.Close(); err != nil {
 				return nil, err
@@ -347,7 +365,7 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 	if lockFirst {
 		pal.versioner, err = deriveVersioner(dbToLoad)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error could not deriver versioner in badgerconnect.loadDataset(): %v", err)
 		}
 		pal.mu.Unlock()
 	}
@@ -396,25 +414,9 @@ func deriveVersioner(db *badger.DB) (sdsshared.VersionManager, error) {
 			return err
 		}
 		item.Value(func(val []byte) error {
-			vs.CurrentVersion = string(val)
-			return nil
-		})
-
-		item, err = txn.Get([]byte("_sources"))
-		if err != nil {
-			return err
-		}
-		item.Value(func(val []byte) error {
-			vs.DataSources = strings.Split(string(val), ",")
-			return nil
-		})
-
-		item, err = txn.Get([]byte("_updated"))
-		if err != nil {
-			return err
-		}
-		item.Value(func(val []byte) error {
-			vs.LastUpdated = string(val)
+			if err := json.Unmarshal(val, &vs); err != nil {
+				return err
+			}
 			return nil
 		})
 
@@ -422,6 +424,5 @@ func deriveVersioner(db *badger.DB) (sdsshared.VersionManager, error) {
 	}); err != nil {
 		return sdsshared.VersionManager{}, err
 	}
-	vs.Repo = sdsshared.DatasetURI
 	return vs, nil
 }

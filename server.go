@@ -133,5 +133,6 @@ func StartServer(dr DataResource, serverName string, port int) error {
 	defer dr.Shutdown()
 
 	//run server
+	log.Printf("Running server on port %d\n", port)
 	return fmt.Errorf("Could not launch server: %+v", server.ListenAndServe())
 }
