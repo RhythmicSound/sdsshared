@@ -13,13 +13,13 @@ The following approach is used:
 There is **no** `internal` package here as there need be no hiding of code from implementation code.
 
 ## Usage
-
 Add to project
 ```go
 go get github.com/rhythmicsound/sdsshared
  ```
 
-Then you can create a new service by picking your connector and running something like: 
+### Using the library
+You can use the library to quickly create a service from pre prepared datasets using an existing connector, such as:
 ```go
 package main
 
@@ -27,17 +27,22 @@ import (
 	"fmt"
 	"log"
 
-	sdsshared "github.com/RhythmicSound/sds-shared"
-	badgerconnector "github.com/RhythmicSound/sds-shared/badgerConnector"
+	sdsshared "github.com/RhythmicSound/sdsshared"
+	badgerconnector "github.com/RhythmicSound/sdsshared/badgerConnector"
 )
 
 func main() {
+    //See the badgerConnector package in this repo for constrictions this places
+    // on the way data is prepared for use by this connector
+	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI, false)
 
-	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI)
-
-	log.Fatalln(sdsshared.StartServer(connector, "", 0))
+    //A standard server will use the server to provide standardised responses to requests
+    // on the given port
+	log.Fatalln(sdsshared.StartServer(connector, fmt.Sprintf("Dummy %s Server", sdsshared.ResourceServiceName), 8080))
 }
+
 ```
+
 Using default type values for the arguments to StartServer allows service name and ports to be set using environment variables at runtime.
 
 An example execute command is: 
@@ -69,6 +74,7 @@ Implement `DataResource` interface
 
 Example:
 ```go
+//Will implement DataResource
 type impl struct{
 	ResourceName string
 	Database     *badger.DB
@@ -123,3 +129,45 @@ vt := &VersionManager{
 ```
 
 > See the badgerConnector package for best practise
+
+## Standard query response
+There is a standardised query response from all data requests to the server
+The format is that of the `sdsshared.SimpleData` struct
+
+Example: 
+From the query 
+```markdown
+http:/localhost:8080/fetch?fetch=CR05qp
+```
+The response from the 'postcodeUK-Service' may be:
+```json
+{
+	"result_count": 1,
+	"request_options": {
+		"fetch": "CR05qp"
+	},
+	"meta": {
+		"resource": "postcodeUK-Service",
+		"dataset_updated": "2021-12-09T15:54:22Z",
+		"data_sources": [
+			"https://osdatahub.os.uk/downloads/open#OPNAME"
+		]
+	},
+	"data": {
+		"values": {
+			"1639065240533169347": {
+				"Admin_county_code": "",
+				"Admin_district_code": "E09000008",
+				"Admin_ward_code": "E05011475",
+				"Country_code": "E92000001",
+				"Eastings": "533803",
+				"NHS_HA_code": "E18000007",
+				"NHS_regional_HA_code": "E19000003",
+				"Northings": "165451",
+				"Positional_quality_indicator": "10",
+				"Postcode": "CR0 5QP"
+			}
+		}
+	}
+}
+```
