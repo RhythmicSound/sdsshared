@@ -2,7 +2,7 @@
 
 ## Requirements
 Datasets using Badger must:
-- Have a key `_version` in the database which holds a JSON encoded sdsshared.VersionManager object. This value will be displayed in json response under `meta` in the form:
+- Have a key `_version` in the database which holds a JSON encoded sdsshared.Meta object (which can be unmarshalled into a sdsshared.VersionManager or vice versa if needs be). This value will be displayed in json response under `meta` in the form:
 ```json
 {
      "meta": {

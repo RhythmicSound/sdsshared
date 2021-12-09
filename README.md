@@ -45,7 +45,7 @@ An example execute command is:
 debug=false \
 name="postcodeUK-Service" \
 database_uri="working/databases/postcodeUKdb" \
-dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" \ 
+dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" \
 objectname="datasets/postcodesUK.zip" \
 go run cmd/dummy.go
 ```

@@ -105,6 +105,7 @@ func StartServer(dr DataResource, serverName string, port int) error {
 			fmt.Fprint(w, errMsgPayload)
 			return
 		}
+		w.Header().Add("content-type", "application/json")
 		fmt.Fprint(w, string(versionDataJSON))
 	})
 
