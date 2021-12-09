@@ -64,7 +64,7 @@ Settings for services created from this library can be hardcoded or set using en
 |`database_uri`| The path -URL or local path- to the database resource to connect to.| "working/databases/simpledataservice-default/" (N.B. this points at a directory as BadgerDB is the default db in use. This could be a URL or path to local file. In some instances, if no db exists in the path given, one could be created.) |
 |`dataset_uri`|The path -URL or local path- to the dataset resource used to rebuild the database.|"working/datasets/data.zip"|
 |`bucket`|The cloud bucket from which to find the dataset archive. (Required only if downloading the dataset from behind an authentication wall)|"simple-data-service"|
-|`object`|The cloud object name found in DatasetBucketName that identifies the dataset archive for download. (Required only if downloading the dataset from behind an authentication wall)|-|
+|`objectname`|The cloud object name found in DatasetBucketName that identifies the dataset archive for download. (Required only if downloading the dataset from behind an authentication wall)|-|
 |`name`|The name of this service as visible to other services.|"Default Resource Name"|
 |`publicport`|PublicPort is the port from which this API can be accessed for data retrieval|"8080"|
 |`downloaddir`|The local path where download files will be saved to|"working/downloads"|
