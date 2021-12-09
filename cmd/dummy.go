@@ -10,7 +10,7 @@ import (
 
 func main() {
 
-	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI, true)
+	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI, false)
 
 	log.Fatalln(sdsshared.StartServer(connector, fmt.Sprintf("Dummy %s Server", sdsshared.ResourceServiceName), 8080))
 }

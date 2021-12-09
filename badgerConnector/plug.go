@@ -151,7 +151,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	//seperator used in CreateKVStoreKey function
 	keySeperator := "/"
 	//standardise and optimise for time sorting
-	value := make(map[string]string, 0)
+	value := make(map[string]interface{}, 0)
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -171,7 +171,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			//If predictiveMode is on, only a list of matching keys are required without timestamp
 			if pal.predictiveMode {
 				if _, ok := value[keyComposite[0]]; ok {
-					value[keyComposite[0]] = strings.Join([]string{value[keyComposite[0]], keyComposite[1]}, ",")
+					value[keyComposite[0]] = true
 				} else {
 					value[keyComposite[0]] = keyComposite[1]
 				}
@@ -180,7 +180,11 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			err := item.Value(func(val []byte) error {
 				// This func with val would only be called if item.Value encounters no error.
 				timestamp := keyComposite[1]
-				value[timestamp] = string(val)
+				jvo := make(map[string]interface{})
+				if err := json.Unmarshal(val, &jvo); err != nil {
+					return err
+				}
+				value[timestamp] = jvo
 				return nil
 			})
 			if err != nil {

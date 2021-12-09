@@ -63,7 +63,7 @@ func StartServer(dr DataResource, serverName string, port int) error {
 			fmt.Fprint(w, errMsgPayload)
 			return
 		}
-		dataJSON, err := json.MarshalIndent(data, " ", " ")
+		dataJSON, err := json.Marshal(data)
 		if err != nil {
 			log.Printf("Error marshalling returned SimpleData struct: %v", err)
 			errMsgPayload, err := returnErrorJSON("Marshaling results error", http.StatusInternalServerError, err.Error())
@@ -74,6 +74,7 @@ func StartServer(dr DataResource, serverName string, port int) error {
 			fmt.Fprint(w, errMsgPayload)
 			return
 		}
+		w.Header().Add("content-type", "application/json")
 		fmt.Fprint(w, string(dataJSON))
 	})
 
