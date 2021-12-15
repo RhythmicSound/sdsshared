@@ -1,7 +1,7 @@
 package badgerconnector
 
 import (
-	"archive/zip"
+	"compress/zlib"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -321,7 +321,7 @@ func (pal Palawan) fetchDataset(datasetURL string, gcp bool) error {
 	}
 	defer resp.Body.Close()
 	//create file in download folder
-	file, err := os.Create(path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zip"))
+	file, err := os.Create(path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zz"))
 	defer file.Close()
 	if err != nil {
 		return err
@@ -331,40 +331,35 @@ func (pal Palawan) fetchDataset(datasetURL string, gcp bool) error {
 	return nil
 }
 
-//loadDataset loads a dataset from a zip archive containing .bak files to an open badgerdb instance
+//loadDataset loads a dataset from a zlib file containing a .bak file to an open badgerdb instance
 //
 //If dbToLoad is nil, it loads the data directly into the pal.Database instance
 func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
-	fileLoc := path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zip")
+	fileLoc := path.Join(sdsshared.LocalDownloadDir, "datasetupdate.zz")
 	lockFirst := false
 	//get usable target database
 	if dbToLoad == nil {
 		dbToLoad = pal.Database
 		lockFirst = true
 	}
-	//open zip
-	zipR, err := zip.OpenReader(fileLoc)
+
+	compressedFile, err := os.Open(fileLoc)
 	if err != nil {
-		return nil, fmt.Errorf("Error. Could not get zip reader in badgerConnector.loadDataset(): %v", err)
+		return nil, fmt.Errorf("Error os.Open failure - Palwan.loadDataset: %v", err)
 	}
-	//load backup file(s)
-	files := zipR.File
+	defer compressedFile.Close()
+
+	fileRC, err := zlib.NewReader(compressedFile)
+	if err != nil {
+		return nil, fmt.Errorf("Error zlib.NewReader failure Palwan.loadDataset")
+	}
+	defer fileRC.Close()
+
 	if lockFirst {
 		pal.mu.Lock()
 	}
-	for _, file := range files {
-		if path.Ext(file.Name) == ".bak" {
-			f, err := file.Open()
-			if err != nil {
-				return nil, err
-			}
-			if err = dbToLoad.Load(f, 10); err != nil {
-				return nil, fmt.Errorf("Error running dbToLoad.Load() in loadDataset within BadgetConnerctor: %v", err)
-			}
-			if err = f.Close(); err != nil {
-				return nil, err
-			}
-		}
+	if err = dbToLoad.Load(fileRC, 10); err != nil {
+		return nil, fmt.Errorf("Error running dbToLoad.Load() in loadDataset within BadgetConnerctor: %v", err)
 	}
 	if lockFirst {
 		pal.versioner, err = deriveVersioner(dbToLoad)
@@ -373,15 +368,13 @@ func (pal *Palawan) loadDataset(dbToLoad *badger.DB) (*badger.DB, error) {
 		}
 		pal.mu.Unlock()
 	}
-	if err := zipR.Close(); err != nil {
-		return nil, err
-	}
 	//cleanup downloads
 	if err := os.Remove(fileLoc); err != nil {
 		return nil, err
 	}
 
 	return dbToLoad, nil
+
 }
 
 //mount loads the given badger DB instance to the Palwan instance and closes the existing instance.

@@ -45,13 +45,21 @@ func main() {
 
 Using default type values for the arguments to StartServer allows service name and ports to be set using environment variables at runtime.
 
-An example execute command is: 
+An example execute command using Cloud Storage is: 
+```go
+debug=false \
+name="postcodeUK-Service" \
+database_uri="working/databases/postcodeUKdb" \
+objectname="datasets/postcodesUK.zz" \
+go run cmd/dummy.go
+```
+Or downloading from an endpoint: 
+
 ```go
 debug=false \
 name="postcodeUK-Service" \
 database_uri="working/databases/postcodeUKdb" \
 dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" \
-objectname="datasets/postcodesUK.zip" \
 go run cmd/dummy.go
 ```
 

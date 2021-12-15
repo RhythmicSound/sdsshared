@@ -48,7 +48,7 @@ func init() {
 	//database location setting
 	DBURI = GetEnv("database_uri", "working/databases/simpledataservice-default/")
 	//location of the dataset archive
-	DatasetURI = GetEnv("dataset_uri", "working/datasets/data.zip")
+	DatasetURI = GetEnv("dataset_uri", "working/datasets/data.zz")
 	//get name of this running resource -
 	ResourceServiceName = GetEnv("name", "Default Resource Name")
 	//get port to use

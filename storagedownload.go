@@ -27,7 +27,7 @@ func GCPDownload(bucket, object string) error {
 	if err := os.MkdirAll(LocalDownloadDir, 0755); err != nil {
 		return err
 	}
-	file, err := os.Create(path.Join(LocalDownloadDir, "datasetupdate.zip"))
+	file, err := os.Create(path.Join(LocalDownloadDir, "datasetupdate.zz"))
 	defer file.Close()
 	if err != nil {
 		return err
