@@ -46,7 +46,7 @@ func StartServer(dr DataResource, serverName string, port int) error {
 		if r.URL.Scheme == "http" {
 			redirect(w, r)
 		}
-		term := r.URL.Query().Get("fetch")
+		term := r.URL.Query().Get("q")
 
 		args := make(map[string]string)
 		for k, v := range r.URL.Query() {

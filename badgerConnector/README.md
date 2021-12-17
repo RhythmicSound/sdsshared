@@ -25,3 +25,10 @@ Datasets using Badger must:
    }
 }
 ```
+## Usage
+BadgerConnect accepts an additional query key:Value `predict` as a bool for whether or not to return an autosuggest list of available keys (true) of a single return value (false).
+
+So an example query to a url endpoint of a server implenting BadgerConnector is like: 
+```markdown
+http:/localhost:8080/fetch?q=CR05qp&predict=false
+```

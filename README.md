@@ -48,18 +48,18 @@ Using default type values for the arguments to StartServer allows service name a
 An example execute command using Cloud Storage is: 
 ```go
 debug=false \
-name="postcodeUK-Service" \
+name="PostcodeUK-Service" \
 database_uri="working/databases/postcodeUKdb" \
-objectname="datasets/postcodesUK.zz" \
+objectname="datasets/PostcodesUK.zz" \
 go run cmd/dummy.go
 ```
 Or downloading from an endpoint: 
 
 ```go
 debug=false \
-name="postcodeUK-Service" \
+name="PostcodeUK-Service" \
 database_uri="working/databases/postcodeUKdb" \
-dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/postcodesUK.zip" \
+dataset_uri="https://storage.cloud.google.com/simple-data-service/datasets/PostcodesUK.zip" \
 go run cmd/dummy.go
 ```
 
@@ -142,10 +142,14 @@ vt := &VersionManager{
 There is a standardised query response from all data requests to the server
 The format is that of the `sdsshared.SimpleData` struct
 
+Endpoints all accept query param `q` for the query term, however all connectors can accept other query params in addition. 
+
+For Example: BadgerConnect accepts an additional query key:Value `predict` as a bool for whether or not to return an autosuggest list of available keys (true) of a single return value (false). 
+
 Example: 
 From the query 
 ```markdown
-http:/localhost:8080/fetch?fetch=CR05qp
+http:/localhost:8080/fetch?q=CR05qp&predict=false
 ```
 The response from the 'postcodeUK-Service' may be:
 ```json

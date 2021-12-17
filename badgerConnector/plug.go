@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,15 +26,18 @@ type Palawan struct {
 	updateCount          int        //number of times UpdateDataset method
 	versioner            sdsshared.VersionManager
 	mu                   *sync.Mutex
-	predictiveMode       bool //whether or not the retieve term should be considered the full search term (false) or an incomplete typed term (true)
+	//predictiveMode is the default value of whether the retieve term should be considered
+	// the full search term (false) returning a single value
+	// or an incomplete  term (true) which needs all matching keys returned
+	predictiveMode bool
 }
 
 //New creates a new BadgerDB Palawan instance that implements DataResource
-func New(resourceName, datasetDownloadLoc string, predictiveMode bool) *Palawan {
+func New(resourceName, datasetDownloadLoc string, predictiveModeDefault bool) *Palawan {
 
 	return &Palawan{
 		ResourceName:   resourceName,
-		predictiveMode: predictiveMode,
+		predictiveMode: predictiveModeDefault,
 		mu:             &sync.Mutex{},
 		updateCount:    0,
 		versioner: sdsshared.VersionManager{
@@ -139,6 +144,17 @@ func (pal *Palawan) Shutdown() error {
 
 //Retrieve is run each time the server receives a search term to query the db for
 func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshared.SimpleData, error) {
+	//check if predictive mode is on
+	predictiveMode := pal.predictiveMode
+	if pred, ok := options["predict"]; ok {
+		predBool, err := strconv.ParseBool(pred)
+		if err != nil {
+			log.Printf("Default to set default predictive mode as non bool value of '%s' given", err)
+		} else {
+			predictiveMode = predBool
+		}
+	}
+
 	out := sdsshared.SimpleData{
 		Meta: sdsshared.Meta{
 			LastUpdated: pal.versioner.LastUpdated,
@@ -155,13 +171,13 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		if pal.predictiveMode {
+		if predictiveMode {
 			opts.PrefetchValues = false
 		}
 		it := txn.NewIterator(opts)
 		defer it.Close()
 		prefix := []byte(toFind + keySeperator)
-		if pal.predictiveMode {
+		if predictiveMode {
 			prefix = []byte(toFind)
 		}
 
@@ -169,7 +185,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			item := it.Item()
 			keyComposite := strings.Split(string(item.Key()), keySeperator)
 			//If predictiveMode is on, only a list of matching keys are required without timestamp
-			if pal.predictiveMode {
+			if predictiveMode {
 				if _, ok := value[keyComposite[0]]; ok {
 					value[keyComposite[0]] = true
 				} else {
