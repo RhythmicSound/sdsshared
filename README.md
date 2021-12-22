@@ -76,6 +76,7 @@ Settings for services created from this library can be hardcoded or set using en
 |`name`|The name of this service as visible to other services.|"Default Resource Name"|
 |`publicport`|PublicPort is the port from which this API can be accessed for data retrieval|"8080"|
 |`downloaddir`|The local path where download files will be saved to|"working/downloads"|
+|`ca_root`|The download URL for the CA Root Certificate of the server processed by the db client (pgx/v4) using `sslrootcert` query key (for more see https://www.cockroachlabs.com/docs/cockroachcloud/authentication.html and for further background: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/ssl-certificate-rotation-postgresql.html#ssl-certificate-rotation-postgresql.determining-client)|-|
 
 ## Writing new backend storage connectors
 Implement `DataResource` interface

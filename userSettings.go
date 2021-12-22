@@ -36,6 +36,14 @@ var (
 	//DatasetObjectName is the cloud object name found in DatasetBucketName that
 	// identifies the dataset archive for download
 	DatasetObjectName string
+
+	//Postgres & Cockroach DB settings
+
+	//CACertURI is the download location for the CA Root Certificate of the server
+	// processed by the db client (pgx/v4) using `sslrootcert` query key
+	// (for more see
+	// https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/ssl-certificate-rotation-postgresql.html#ssl-certificate-rotation-postgresql.determining-client)
+	CACertURI string
 )
 
 func init() {
@@ -64,4 +72,7 @@ func init() {
 	}
 	DatasetBucketName = GetEnv("bucket", DatasetBucketName)
 	DatasetObjectName = GetEnv("objectname", DatasetObjectName)
+
+	//Postgres CA Root Cert
+	CACertURI = GetEnv("ca_root", "")
 }
