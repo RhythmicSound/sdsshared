@@ -17,11 +17,20 @@ import (
 //
 //Using a Unix timestamp means just sorted the keys in place will give time sorted
 // list
+//
+//Currently uses time.Now().Unix as a suffix to create composite uid. This will
+// be updated to github.com/google/uuid in future releases
 func CreateKVStoreKey(key string, sep string) string {
 	if sep == "" {
 		sep = "/"
 	}
 	return fmt.Sprintf("%s%s%d", key, sep, time.Now().UnixNano())
+}
+
+//CreateKVStoreKeyWithTable is similar to CreateKVStoreKey but prefixes it with
+// the table (aka bucket or namespace) value as is convention with sdsdataprep.Storer.Write
+func CreateKVStoreKeyWithTable(table string, key string, sep string) string {
+	return fmt.Sprintf("%s%s%s", table, sep, CreateKVStoreKey(key, sep))
 }
 
 //isValidUrl tests a string to determine if it is a well-structured url or not.
