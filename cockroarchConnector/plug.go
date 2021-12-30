@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/RhythmicSound/sdsshared"
 	"github.com/jackc/pgconn"
@@ -20,11 +21,15 @@ type Blaberus struct {
 	databaseURL string
 	//DBCARoot is the URL of the root cert of the db server.
 	// Usually set by collecting the envar into sdsshared.CACertURI
-	DBCARoot   string
-	Connection *pgxpool.Pool
-	Ctx        context.Context
-	Prepared   map[string]pgconn.StatementDescription
-	Meta       sdsshared.Meta
+	DBCARoot          string
+	Connection        *pgxpool.Pool
+	Ctx               context.Context
+	Prepared          map[string]pgconn.StatementDescription
+	Meta              sdsshared.Meta
+	dbName            string
+	schemaName        string
+	tableName         string
+	defaultComparator string
 }
 
 //New creates a new Blaberus core object.
@@ -32,11 +37,15 @@ type Blaberus struct {
 //Takes the database URL and the URL of the database server's root CA certificate
 // for SSL (pass in sdsshared.DBURI and sdsshared.CACertURI) to dynamically set
 // these by standard environment variables.
-func New(databaseURL string, caRootURL string) (Blaberus, error) {
+func New(databaseURL string, caRootURL string, databaseName, schemaName, tableName, defaultComparatorColumn string) (Blaberus, error) {
 	return Blaberus{
-		Ctx:         context.Background(),
-		databaseURL: databaseURL,
-		DBCARoot:    caRootURL,
+		Ctx:               context.Background(),
+		databaseURL:       databaseURL,
+		DBCARoot:          caRootURL,
+		dbName:            databaseName,
+		schemaName:        schemaName,
+		tableName:         tableName,
+		defaultComparator: defaultComparatorColumn,
 	}, nil
 }
 
@@ -70,12 +79,24 @@ func (blab Blaberus) UpdateDataset() (sdsshared.VersionManager, error) {
 func (blab Blaberus) Retrieve(searchQuery string, queryMap map[string]string) (sdsshared.SimpleData, error) {
 	var err error
 	var rows pgx.Rows
+	//prepare SQL statement
+	comparator, ok := queryMap["dimension"]
+	if !ok {
+		comparator = blab.defaultComparator
+	}
+	statementPredict := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE %s LIKE '%s%%'", strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
+	statementFind := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE %s = '%s%%'", strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
+
 	//Get search type from queryMap expected entry
-	switch queryMap["type"] {
-	case "condition":
-		rows, err = blab.Connection.Query(blab.Ctx, "SQL string", "args...")
+	predict, err := strconv.ParseBool(queryMap["predict"])
+	if err != nil {
+		return sdsshared.SimpleData{}, fmt.Errorf("Could not parse predict option in CockroachConnector.Retrieve :%v", err)
+	}
+	switch {
+	case predict:
+		rows, err = blab.Connection.Query(blab.Ctx, statementPredict)
 	default:
-		rows, err = blab.Connection.Query(blab.Ctx, "SQL string", "args...")
+		rows, err = blab.Connection.Query(blab.Ctx, statementFind)
 	}
 	defer rows.Close()
 

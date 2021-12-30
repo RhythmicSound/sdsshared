@@ -11,11 +11,16 @@ import (
 
 func main() {
 	//dummy cockroachConnector
-	connectorCockroach, err := cockroarchconnector.New(sdsshared.DBURI, sdsshared.CACertURI)
+	dbURL := "***"
+	CAcert := "***"
+
+	connectorCockroach, err := cockroarchconnector.New(dbURL, CAcert, "geography", "public", "postcodesuk", "postcode")
 	if err != nil {
 		log.Panicln(err)
 	}
-	go log.Fatalln(sdsshared.StartServer(&connectorCockroach, fmt.Sprintf("Dummy Cockroach %s Server", sdsshared.ResourceServiceName), 8081))
+	go func() {
+		log.Fatalln(sdsshared.StartServer(&connectorCockroach, fmt.Sprintf("Dummy Cockroach %s Server", sdsshared.ResourceServiceName), 8081))
+	}()
 
 	//dummy badgerConnector
 	connector := badgerconnector.New(sdsshared.ResourceServiceName, sdsshared.DatasetURI, false)
