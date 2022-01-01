@@ -1,4 +1,4 @@
-package cockroarchconnector
+package cockroachconnector
 
 import (
 	"context"

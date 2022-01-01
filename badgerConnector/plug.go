@@ -85,7 +85,7 @@ func (pal *Palawan) Startup() error {
 		}
 	}
 
-	//turn on debug if needed. If so add test data
+	//Add test data for debug mode
 	if sdsshared.DebugMode {
 		//?TESTING AND DEBUG-----------------------------------
 		if err := pal.AddTestData(20); err != nil {
