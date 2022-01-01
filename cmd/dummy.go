@@ -11,8 +11,8 @@ import (
 
 func main() {
 	//dummy cockroachConnector
-	dbURL := "***"
-	CAcert := "***"
+	dbURL := "postgresql://carl:F3AUqIFta3UYC4Av@free-tier5.gcp-europe-west1.cockroachlabs.cloud:26257/defaultdb?options=--cluster%3Dmore-coffee-please-2473"
+	CAcert := "https://cockroachlabs.cloud/clusters/b3088b3c-daf9-4ad9-badc-353ebacbb48b/cert"
 
 	connectorCockroach, err := cockroarchconnector.New(dbURL, CAcert, "geography", "public", "postcodesuk", "postcode")
 	if err != nil {

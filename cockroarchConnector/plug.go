@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/RhythmicSound/sdsshared"
 	"github.com/jackc/pgconn"
@@ -79,23 +80,24 @@ func (blab Blaberus) UpdateDataset() (sdsshared.VersionManager, error) {
 func (blab Blaberus) Retrieve(searchQuery string, queryMap map[string]string) (sdsshared.SimpleData, error) {
 	var err error
 	var rows pgx.Rows
+	searchQuery = strings.ToUpper(searchQuery)
 	//prepare SQL statement
 	comparator, ok := queryMap["dimension"]
 	if !ok {
 		comparator = blab.defaultComparator
 	}
-	statementPredict := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE %s LIKE '%s%%'", strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
-	statementFind := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE %s = '%s%%'", strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
+	statementPredict := fmt.Sprintf("SELECT %s FROM %s.%s.%s WHERE %s LIKE '%s%%';", comparator, strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
+	statementFind := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE %s = '%s';", strconv.Quote(blab.dbName), strconv.Quote(blab.schemaName), strconv.Quote(blab.tableName), comparator, searchQuery)
 
 	//Get search type from queryMap expected entry
 	predict, err := strconv.ParseBool(queryMap["predict"])
 	if err != nil {
 		return sdsshared.SimpleData{}, fmt.Errorf("Could not parse predict option in CockroachConnector.Retrieve :%v", err)
 	}
-	switch {
-	case predict:
+
+	if predict {
 		rows, err = blab.Connection.Query(blab.Ctx, statementPredict)
-	default:
+	} else {
 		rows, err = blab.Connection.Query(blab.Ctx, statementFind)
 	}
 	defer rows.Close()
@@ -107,29 +109,15 @@ func (blab Blaberus) Retrieve(searchQuery string, queryMap map[string]string) (s
 	//process results into sdsshared.SimpleData struct ---
 	out := sdsshared.SimpleData{
 		RequestOptions: queryMap,
-		Meta:           blab.Meta, //gathered in startup
+		Meta:           blab.Meta, //todo: gather in startup
 	}
-	outData := make([]map[string]interface{}, 0)
-	headers := rows.FieldDescriptions()
-	for rows.Next() {
-		//Add another result count to the output
-		out.ResultCount += 1
-		//get field value list from row
-		values, err := rows.Values()
-		if err != nil {
-			return sdsshared.SimpleData{}, fmt.Errorf("Error getting values from db rows in Retrieve within cockroachConnector in Retrieve: %v", err)
-		}
-		//Zip field values with headers
-		collect := make(map[string]interface{})
-		for i, header := range headers {
-			collect[string(header.Name)] = values[i]
-		}
-		//add to data list in SimpleData
-		outData = append(outData, collect)
-	}
-	out.Data.Values = outData
 
-	return out, nil
+	//format and return the values in standardised format as sdsshared.SimpleData objects
+	if predict {
+		return predictResponseParsingToSimpleData(rows, out)
+	} else {
+		return responseParsingToSimpleData(rows, out)
+	}
 }
 
 //Shutdown runs scripts that gracefully closes the connection and server
@@ -179,4 +167,51 @@ func (blab *Blaberus) GetCARootCert(certDirectory, certFileName string) error {
 		blab.databaseURL = u.String()
 	}
 	return nil
+}
+
+/***********************************
+Response formatting functions
+***********************************/
+
+//predictResponseParsingToSimpleData formats responses where a summarised list of object keys
+// are required to be output as a map[string]bool in SimpleData.Data.Values
+func predictResponseParsingToSimpleData(rows pgx.Rows, out sdsshared.SimpleData) (sdsshared.SimpleData, error) {
+	outDataPredict := make((map[string]bool))
+	for rows.Next() {
+		//Add another result count to the output
+		out.ResultCount += 1
+		//get field value list from row
+		values, err := rows.Values()
+		if err != nil {
+			return sdsshared.SimpleData{}, fmt.Errorf("Error getting values from db rows in Retrieve within cockroachConnector in Retrieve: %v", err)
+		}
+		outDataPredict[fmt.Sprint(values[0])] = true
+	}
+	out.Data.Values = outDataPredict
+	return out, nil
+}
+
+//responseParsingToSimpleData formats responses where full data objects are
+// required to be output in an array in SimpleData.Data.Values
+func responseParsingToSimpleData(rows pgx.Rows, out sdsshared.SimpleData) (sdsshared.SimpleData, error) {
+	outData := make([]map[string]interface{}, 0)
+	headers := rows.FieldDescriptions()
+	for rows.Next() {
+		//Add another result count to the output
+		out.ResultCount += 1
+		//get field value list from row
+		values, err := rows.Values()
+		if err != nil {
+			return sdsshared.SimpleData{}, fmt.Errorf("Error getting values from db rows in Retrieve within cockroachConnector in Retrieve: %v", err)
+		}
+		//Zip field values with headers
+		collect := make(map[string]interface{})
+		for i, header := range headers {
+			collect[string(header.Name)] = values[i]
+		}
+		//add to data list in SimpleData
+		outData = append(outData, collect)
+	}
+	out.Data.Values = outData
+	return out, nil
 }

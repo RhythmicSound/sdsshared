@@ -109,26 +109,30 @@ func (pal *Palawan) Startup() error {
 		}); err != nil {
 			return err
 		}
-		//Print top 5 items to logout for debug and visual accuracy check
-		top := 5
-		opt := badger.DefaultIteratorOptions
-		opt.PrefetchValues = true
-		opt.PrefetchSize = top
-		it := txn.NewIterator(opt)
-		defer it.Close()
-		it.Rewind()
-		for i := 0; i < top && it.Valid(); i += 1 {
-			item := it.Item()
-			item.Value(func(val []byte) error {
-				vl := make(map[string]string)
-				if err := json.Unmarshal(val, &vl); err != nil {
-					return err
-				}
-				fmt.Printf("%s -> %+v\n", string(item.Key()), vl)
-				return nil
-			})
-			it.Next()
-		} //Top complete
+
+		if sdsshared.Verbose {
+			//Print top 5 items to logout for debug and visual accuracy check
+			top := 5
+			opt := badger.DefaultIteratorOptions
+			opt.PrefetchValues = true
+			opt.PrefetchSize = top
+			it := txn.NewIterator(opt)
+			defer it.Close()
+			it.Rewind()
+			for i := 0; i < top && it.Valid(); i += 1 {
+				item := it.Item()
+				item.Value(func(val []byte) error {
+					vl := make(map[string]string)
+					if err := json.Unmarshal(val, &vl); err != nil {
+						return err
+					}
+					fmt.Printf("%s -> %+v\n", string(item.Key()), vl)
+					return nil
+				})
+				it.Next()
+			} //Top complete
+		}
+
 		return nil
 	}); err != nil {
 		return err
@@ -168,6 +172,7 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	keySeperator := "/"
 	//standardise and optimise for time sorting
 	value := make(map[string]interface{}, 0)
+	valueSpecific := make([]interface{}, 0)
 
 	err := pal.Database.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -186,11 +191,8 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 			keyComposite := strings.Split(string(item.Key()), keySeperator)
 			//If predictiveMode is on, only a list of matching keys are required without timestamp
 			if predictiveMode {
-				if _, ok := value[keyComposite[0]]; ok {
-					value[keyComposite[0]] = true
-				} else {
-					value[keyComposite[0]] = keyComposite[1]
-				}
+				//value[keyComposite[0]] = keyComposite[1]
+				value[keyComposite[0]] = true //little value in update timestamp in predict use case. Speed boost
 				continue
 			}
 			err := item.Value(func(val []byte) error {
@@ -200,7 +202,14 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 				if err := json.Unmarshal(val, &jvo); err != nil {
 					return err
 				}
-				value[timestamp] = jvo
+				if _, ok := jvo["updated_on"]; ok {
+					updatedOn, err := strconv.ParseInt(timestamp, 10, 64)
+					if err != nil {
+						return err
+					}
+					jvo["updated_on"] = time.Unix(0, updatedOn).Format(time.RFC3339)
+				}
+				valueSpecific = append(valueSpecific, jvo)
 				return nil
 			})
 			if err != nil {
@@ -213,8 +222,14 @@ func (pal *Palawan) Retrieve(toFind string, options map[string]string) (sdsshare
 	if err != nil {
 		return sdsshared.SimpleData{}, err
 	}
-	out.Data.Values = value
-	out.ResultCount = len(value)
+
+	if predictiveMode {
+		out.Data.Values = value
+		out.ResultCount = len(value)
+	} else {
+		out.Data.Values = valueSpecific
+		out.ResultCount = len(valueSpecific)
+	}
 
 	return out, nil
 }

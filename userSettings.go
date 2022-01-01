@@ -16,6 +16,8 @@ var (
 	//Whether verbose logging and test data should be used.
 	// Never set true for production
 	DebugMode bool
+	//Verbose whether to print extra output to std.out to assist with debug
+	Verbose bool
 	//DBURI is the path -URL or local path- to the database resource.
 	// If it doesn't exist one will be created at this resource for
 	// some connector implementations. For local dbs this may be pre/suf-fixed
@@ -63,6 +65,11 @@ func init() {
 	PublicPort = GetEnv("publicport", "8080")
 	//get download dir to use
 	LocalDownloadDir = GetEnv("downloaddir", "working/downloads")
+	//get whether to do verbose output
+	Verbose, err = strconv.ParseBool(GetEnv("verbose", "false"))
+	if err != nil {
+		Verbose = false
+	}
 
 	//GCP Authentication
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
