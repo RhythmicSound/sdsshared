@@ -148,10 +148,22 @@ Endpoints all accept query param `q` for the query term, however all connectors 
 
 For Example: BadgerConnect accepts an additional query key:Value `predict` as a bool for whether or not to return an autosuggest list of available keys (true) of a single return value (false). 
 
+Another example is `dimension` used by CockroachConnect which lets it know which column to search against. 
+
+Generally URL query string arguments should either demonstrate the same functionality or be ignored for interopability. Currently the below args are standard: 
+
+|Arg|Use|Required|
+|-|-|-|
+|`q`|The query term|All queries|
+|`predect`|Whether to attempt to find an exact match to return a single result (false) or to return a summary array of all partial matches (true) useful in autocomplete|Defaults to false|
+|`dimension`|Which field/column to search against. In KV database implementations the key is the only dimension, so this is not required. More advanced database connectors that are unable to autoselect Primary Key column(s) will require this.|Only in SQL or multiple index implementations. Should attempt a sensible default if not present, but best practise **requires** it.|
+
+## Example Query
+
 Example: 
 From the query 
 ```markdown
-http:/localhost:8080/fetch?q=CR05qp&predict=false
+http:/localhost:8080/fetch?q=CR05qp&predict=false&dimension=postcode
 ```
 The response from the 'postcodeUK-Service' may be:
 ```json
